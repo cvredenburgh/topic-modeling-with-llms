@@ -1,15 +1,19 @@
 ---
-title: Statistical Topics to Actionable Insights: How LLMs Elevate Topic Modeling
+title: Statistical Topics to Actionable Insights: Elevating Topic Modeling With LLMs
 description: Topic models can find the signal in noisy text, but often stop at sets of words. Coupling LLMs with traditional data science, we can turn statistical patterns into clear insights, summaries, and actions.
-tags: [  "topic-modeling", 
-  "llm", 
-  "data-science", 
-  "insight-generation", 
-  "unstructured-data", 
-  "automation"]
+tags: 
+  - topic-modeling
+  - llm
+  - data-science
+  - insight-generation
+  - unstructured-data
+  - automation
 githubUrl: https://github.com/cvredenburgh/topic-modeling-with-llms
 date: 2025-09-29
 ---
+
+# Statistical Topics to Actionable Insights: Elevating Topic Modeling With LLMs
+
 
 ## Topic Modeling Background
 - Why topic modeling still matters
