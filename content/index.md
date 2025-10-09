@@ -1,8 +1,8 @@
 ---
-title: Statistical Topics to Actionable Insights: Elevating Topic Modeling With LLMs
-description: Topic models can filter for meaningful signal in unstructured text, but it often stops at short n-grams or sets of words. Here I show the utility of coupling LLMs with topic modeling, turning statistical patterns into clear insights, summaries, and (potentially) adatpive workflow automation.
+title: "Statistical Topics to Actionable Insights: Elevating Topic Modeling With LLMs"
+description: "Topic models can filter for meaningful signal in unstructured text, but it often stops at short n-grams or sets of words. Here I show the utility of coupling LLMs with topic modeling, turning statistical patterns into clear insights, summaries, and (potentially) adatpive workflow automation."
 tags: ["topic-modeling", "llm", "data-science", "insight-generation", "unstructured-data", "automation"]
-githubUrl: https://github.com/cvredenburgh/topic-modeling-with-llms
+githubUrl: "https://github.com/cvredenburgh/topic-modeling-with-llms"
 date: 2025-09-29
 ---
 
