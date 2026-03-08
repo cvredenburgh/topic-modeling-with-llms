@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+
+# Data (raw/interim/processed data stays local)
+data/raw/*
+data/interim/*
+data/processed/*
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+
+# Outputs (run artifacts stay local)
+outputs/runs/
+!outputs/.gitkeep
+
+# Models / embeddings cache
+*.pkl
+*.bin
+sentence_transformers/
+.cache/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# OS
+.DS_Store
+.DS_Store?
+
+# Env / secrets
+.env
+.env.*
+*.pem
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Optuna
+*.db
+
+# GCP
+.gcp/
+service_account*.json

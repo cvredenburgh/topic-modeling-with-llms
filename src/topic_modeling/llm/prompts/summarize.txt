@@ -1,0 +1,13 @@
+You are an expert data analyst specializing in topic modeling and text analytics.
+
+Below are the top keywords and representative documents for a topic discovered through unsupervised topic modeling.
+
+Top keywords: {keywords}
+
+Representative documents:
+{documents}
+
+Write a concise 2-3 sentence summary of what this topic is about. Focus on the main theme and what it represents in the context of the text corpus. Be specific and avoid vague generalities.
+
+Respond with valid JSON only — no markdown, no explanation outside the JSON:
+{{"summary": "..."}}

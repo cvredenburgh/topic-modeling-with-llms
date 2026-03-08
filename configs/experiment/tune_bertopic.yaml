@@ -1,0 +1,113 @@
+run:
+  name: tune_bertopic
+  seed: 42
+  output_dir: outputs/runs
+  log_level: INFO
+
+runtime:
+  target: local
+
+dataset:
+  source: huggingface
+  name: McAuley-Lab/Amazon-Reviews-2023
+  subset: raw_review_All_Beauty
+  split: full
+  text_column: text
+  date_column: timestamp
+  metadata_columns:
+    - rating
+    - timestamp
+  sample_n: 20000
+
+preprocessing:
+  min_length: 30
+  remove_duplicates: true
+  strip_html: true
+  language_filter: en
+
+model:
+  backend: bertopic
+  params:
+    embedding_model: all-MiniLM-L6-v2
+    top_n_words: 10
+
+tuning:
+  enabled: true
+  method: optuna
+  n_trials: 30
+  # Set metric: composite to use weighted scoring across multiple metrics.
+  # Set metric: coherence (or any single metric) for single-objective tuning.
+  metric: coherence
+  metric_weights:
+    coherence: 2.0
+    diversity: 2.0
+    silhouette: 1.5
+    outlier_ratio: 0.5
+    dist_entropy: 0.75
+    topic_count: 1.0
+  higher_is_better:
+    coherence: true
+    diversity: true
+    silhouette: true
+    outlier_ratio: false
+    dist_entropy: true
+    topic_count: true
+  search_space:
+    umap_n_components:
+      type: int
+      low: 3
+      high: 15
+    umap_n_neighbors:
+      type: int
+      low: 5
+      high: 50
+    hdbscan_min_cluster_size:
+      type: int
+      low: 5
+      high: 50
+    hdbscan_min_samples:
+      type: int
+      low: 1
+      high: 10
+
+evaluation:
+  metrics:
+    - coherence
+    - diversity
+    - outlier_ratio
+    - topic_size_stats
+  coherence_measure: c_v
+  topn: 10
+
+llm:
+  provider: anthropic
+  model: claude-sonnet-4-6
+  api_key_env: ~
+  api_base: ~
+  batch_size: 10
+  max_retries: 3
+  max_tokens: 1024
+  temperature: 0.0
+  reliability_enabled: false
+  reliability_samples: 3
+  reliability_min_agreement: 0.67
+  enabled: true
+
+analysis:
+  enabled: true
+  hierarchy: true
+  associations: true
+  trends: true
+  trend_freq: ME
+  trend_window: 3
+  keyword_weight: 0.7
+  min_cooccurrence: 5
+  alpha: 0.05
+
+reporting:
+  formats:
+    - markdown
+    - json
+  top_n_terms: 10
+  top_n_docs: 3
+  save_model: true

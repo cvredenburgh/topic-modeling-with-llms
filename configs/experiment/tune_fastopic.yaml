@@ -1,0 +1,84 @@
+run:
+  name: tune_fastopic
+  seed: 42
+  output_dir: outputs/runs
+  log_level: INFO
+
+runtime:
+  target: local
+
+dataset:
+  source: huggingface
+  name: McAuley-Lab/Amazon-Reviews-2023
+  subset: raw_review_All_Beauty
+  split: full
+  text_column: text
+  date_column: timestamp
+  metadata_columns:
+    - rating
+    - timestamp
+  sample_n: 20000
+
+preprocessing:
+  min_length: 30
+  remove_duplicates: true
+  strip_html: true
+  language_filter: en
+
+model:
+  backend: fastopic
+  params:
+    num_top_words: 15
+
+tuning:
+  enabled: true
+  method: optuna
+  n_trials: 20
+  metric: coherence
+  search_space:
+    num_topics:
+      type: int
+      low: 20
+      high: 100
+
+evaluation:
+  metrics:
+    - coherence
+    - diversity
+    - outlier_ratio
+    - topic_size_stats
+  coherence_measure: c_v
+  topn: 10
+
+llm:
+  provider: anthropic
+  model: claude-sonnet-4-6
+  api_key_env: ~
+  api_base: ~
+  batch_size: 10
+  max_retries: 3
+  max_tokens: 1024
+  temperature: 0.0
+  reliability_enabled: false
+  reliability_samples: 3
+  reliability_min_agreement: 0.67
+  enabled: true
+
+analysis:
+  enabled: true
+  hierarchy: true
+  associations: true
+  trends: true
+  trend_freq: ME
+  trend_window: 3
+  keyword_weight: 0.7
+  min_cooccurrence: 5
+  alpha: 0.05
+
+reporting:
+  formats:
+    - markdown
+    - json
+  top_n_terms: 10
+  top_n_docs: 3
+  save_model: true

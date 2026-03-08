@@ -1,0 +1,11 @@
+source: huggingface
+name: McAuley-Lab/Amazon-Reviews-2023
+subset: raw_review_All_Beauty
+split: full
+text_column: text
+id_column: ~
+metadata_columns:
+  - rating
+  - verified_purchase
+  - timestamp
+sample_n: 20000

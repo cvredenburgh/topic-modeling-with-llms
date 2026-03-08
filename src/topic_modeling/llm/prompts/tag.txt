@@ -1,0 +1,45 @@
+You are an expert data analyst specializing in topic modeling and business intelligence.
+
+Below are the top keywords and representative documents for a topic discovered through unsupervised topic modeling.
+
+Top keywords: {keywords}
+
+Representative documents:
+{documents}
+
+Domain context: {domain_context}
+
+Assign 2-5 practical business or domain tags that best describe this topic. Tags should be concise noun phrases such as: "product quality", "shipping experience", "pricing concerns", "customer service", "feature request", "policy concern", "return process", "packaging", "durability", "ease of use".
+
+For each tag, assess whether it is consistently supported by 75%+ of the representative documents. Set "consistent": true if so, false otherwise.
+
+---
+
+EXAMPLE 1 — consistent topic (use as model):
+  Keywords: shipping, delay, late, package, delivery, slow, arrived, weeks, tracking, carrier
+  Documents:
+    [1] "My order arrived 3 weeks late and tracking never updated."
+    [2] "Shipping took forever — paid for express and still waited 10 days."
+    [3] "Package was delayed twice with no explanation from the carrier."
+  Response: {{"tags": [{{"tag": "shipping delays", "consistent": true}}, {{"tag": "delivery experience", "consistent": true}}]}}
+
+EXAMPLE 2 — mixed topic (extract only dominant theme):
+  Keywords: price, color, size, quality, fit, cheap, expensive, variety, options, look
+  Documents:
+    [1] "Great price for what you get."
+    [2] "Wrong color shipped, very disappointed."
+    [3] "Love the quality but sizing runs small."
+  Response: {{"tags": [{{"tag": "product variety", "consistent": false}}, {{"tag": "pricing concerns", "consistent": false}}]}}
+
+EXAMPLE 3 — strong single theme:
+  Keywords: return, refund, easy, process, hassle, policy, exchange, quick, smooth, label
+  Documents:
+    [1] "Return process was incredibly easy — got my refund in 2 days."
+    [2] "Exchanged for a different size, hassle-free."
+    [3] "The return label was included and the refund was quick."
+  Response: {{"tags": [{{"tag": "return process", "consistent": true}}]}}
+
+---
+
+Respond with valid JSON only — no markdown, no explanation outside the JSON:
+{{"tags": [{{"tag": "tag1", "consistent": true}}, {{"tag": "tag2", "consistent": false}}, ...]}}
