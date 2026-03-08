@@ -41,6 +41,10 @@ class TopicModelBase(ABC):
     def load(self, path: Path) -> "TopicModelBase":
         """Load model artifacts from path."""
 
+    @abstractmethod
+    def get_document_topic_assignments(self) -> List[int]:
+        """Return topic_id per document in corpus order (parallel to fit texts)."""
+
     def get_topic_count(self) -> int:
         """Number of real topics (excludes -1 outlier bucket)."""
         return sum(1 for k in self.get_topics() if k != -1)

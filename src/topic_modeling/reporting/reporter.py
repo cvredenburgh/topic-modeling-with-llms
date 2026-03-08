@@ -1,11 +1,9 @@
 """Generate run artifact bundles and markdown reports."""
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime
-from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
@@ -25,6 +23,8 @@ def generate_report(
     summaries: List[Dict],
     tags: List[Dict],
     preprocessing_stats: Dict[str, Any],
+    tuning_trials: Optional[List[Dict]] = None,
+    analysis_results: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Save all run artifacts and a human-readable markdown summary."""
     rpt = config.reporting
@@ -33,8 +33,11 @@ def generate_report(
     topics_rows = _build_topics_df(model, summaries, tags, rpt)
     store.save_csv(topics_rows, "topics.csv")
 
-    # --- metrics.json ---
+    # --- metrics.json (flatten out per-topic sub-dict) ---
+    per_topic = metrics.get("per_topic_metrics")
     store.save_json(metrics, "metrics.json")
+    if per_topic:
+        store.save_json(per_topic, "topic_metrics.json")
 
     # --- topic_summaries.jsonl ---
     store.save_jsonl(summaries, "topic_summaries.jsonl")
@@ -45,10 +48,34 @@ def generate_report(
     # --- preprocessing_stats.json ---
     store.save_json(preprocessing_stats, "preprocessing_stats.json")
 
+    # --- analysis artifacts ---
+    if analysis_results:
+        if "hierarchy" in analysis_results:
+            store.save_csv(analysis_results["hierarchy"], "hierarchy.csv")
+        if "associations" in analysis_results:
+            store.save_csv(analysis_results["associations"], "associations.csv")
+        if "trends" in analysis_results:
+            store.save_csv(analysis_results["trends"], "topic_trends.csv")
+        if "emerging" in analysis_results:
+            store.save_csv(analysis_results["emerging"], "emerging_topics.csv")
+        if "trend_stats" in analysis_results:
+            store.save_csv(analysis_results["trend_stats"], "trend_stats.csv")
+
     # --- markdown report ---
     if "markdown" in rpt.formats:
-        md = _build_markdown(config, metrics, topics_rows, preprocessing_stats)
+        md = _build_markdown(config, metrics, topics_rows, preprocessing_stats, analysis_results or {})
         store.save_text(md, "report.md")
+
+    # --- figures ---
+    if "figures" in rpt.formats and tuning_trials:
+        from topic_modeling.reporting.figures import generate_figures
+        metric_cols = rpt.figure_metric_cols or ["coherence", "diversity"]
+        generate_figures(
+            trials=tuning_trials,
+            metric_cols=metric_cols,
+            param_metric_pairs=rpt.figure_param_metric_pairs,
+            output_dir=store.run_dir / "figures",
+        )
 
     logger.info("Report generation complete")
 
@@ -69,13 +96,20 @@ def _build_topics_df(
         top_terms = ", ".join(w for w, _ in word_scores[: rpt.top_n_terms])
         rep_docs = model.get_representative_docs(topic_id, n=rpt.top_n_docs)
         summary = summary_map.get(topic_id, {}).get("summary", "")
-        topic_tags = "|".join(tag_map.get(topic_id, {}).get("tags", []))
+        raw_tags = tag_map.get(topic_id, {}).get("tags", [])
+        topic_tags = "|".join(
+            t["tag"] if isinstance(t, dict) else t for t in raw_tags
+        )
+        consistent_tags = "|".join(
+            t["tag"] for t in raw_tags if isinstance(t, dict) and t.get("consistent")
+        )
         rows.append(
             {
                 "topic_id": topic_id,
                 "top_terms": top_terms,
                 "summary": summary,
                 "tags": topic_tags,
+                "consistent_tags": consistent_tags,
                 "representative_doc_1": rep_docs[0] if len(rep_docs) > 0 else "",
                 "representative_doc_2": rep_docs[1] if len(rep_docs) > 1 else "",
                 "representative_doc_3": rep_docs[2] if len(rep_docs) > 2 else "",
@@ -89,6 +123,7 @@ def _build_markdown(
     metrics: Dict[str, Any],
     topics_df: pd.DataFrame,
     pre_stats: Dict[str, Any],
+    analysis_results: Dict[str, Any] = {},
 ) -> str:
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
     lines = [
@@ -132,5 +167,31 @@ def _build_markdown(
             f"**Summary:** {row['summary']}  ",
             f"",
         ]
+
+    # --- Hierarchy section ---
+    if "hierarchy" in analysis_results and not analysis_results["hierarchy"].empty:
+        hier_df = analysis_results["hierarchy"]
+        lines += ["---", "", "## Topic Hierarchy", ""]
+        # Show top-level clusters: highest linkage_height rows (one per parent)
+        top_merges = hier_df.drop_duplicates("parent_id").nlargest(5, "linkage_height")
+        for _, r in top_merges.iterrows():
+            children = hier_df[hier_df["parent_id"] == r["parent_id"]]["child_id"].tolist()
+            lines.append(f"- **Cluster {int(r['parent_id'])}** (similarity={r['similarity']:.3f}): topics {children}")
+        lines.append("")
+
+    # --- Emerging topics section ---
+    if "emerging" in analysis_results and not analysis_results["emerging"].empty:
+        emerging = analysis_results["emerging"][analysis_results["emerging"]["emerging"]]
+        if not emerging.empty:
+            lines += ["---", "", "## Emerging Topics", ""]
+            lines += [
+                "| Topic ID | Growth Rate |",
+                "|----------|-------------|",
+            ]
+            for _, r in emerging.iterrows():
+                gr = r["growth_rate"]
+                gr_str = f"{gr:.1%}" if gr != float("inf") else "∞"
+                lines.append(f"| {int(r['topic_id'])} | {gr_str} |")
+            lines.append("")
 
     return "\n".join(lines)

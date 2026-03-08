@@ -20,9 +20,9 @@ class FASTopicAdapter(TopicModelBase):
     FASTopic API reference:
         model = FASTopic(num_topics=50)
         model.fit(texts)
-        model.get_beta()     -> (n_topics, vocab_size) topic-word distribution
-        model.get_theta()    -> (n_docs, n_topics) doc-topic distribution
-        model.get_top_words(top_n=15) -> list of lists of top words per topic
+        model.get_beta()           -> (n_topics, vocab_size) topic-word matrix
+        model.get_theta()          -> (n_docs, n_topics) doc-topic matrix
+        model.get_top_words(top_n) -> list[list[str]] top words per topic
     """
 
     def __init__(self, config: ModelConfig, seed: int = 42):
@@ -54,46 +54,57 @@ class FASTopicAdapter(TopicModelBase):
     def transform(
         self, texts: List[str]
     ) -> Tuple[List[int], Optional[np.ndarray]]:
-        """Assign dominant topic per document using training theta if available,
-        otherwise approximate via closest training doc embedding."""
+        """Return dominant topic per document.
+
+        FASTopic does not support inference on unseen documents. If the texts
+        match the fitted corpus the stored theta is returned; otherwise topic
+        assignments default to -1 with a logged warning.
+        """
         if self._theta is not None and texts == self._fitted_texts:
             topic_ids = np.argmax(self._theta, axis=1).tolist()
             return topic_ids, self._theta
 
-        # For new documents, FASTopic doesn't support native transform —
-        # fall back to returning -1 with a warning.
         logger.warning(
-            "FASTopic does not support transform on unseen docs; "
-            "returning training assignments if texts match fitted corpus."
+            "FASTopic does not support transform on unseen documents. "
+            "Call transform with the same texts passed to fit() to get "
+            "training-set assignments."
         )
-        topic_ids = [-1] * len(texts)
-        return topic_ids, None
+        return [-1] * len(texts), None
 
     def get_topics(self) -> Dict[int, List[Tuple[str, float]]]:
+        """Return {topic_id: [(word, score), ...]} using beta rank positions.
+
+        Words are returned in descending score order. Scores are taken from
+        the beta matrix at the corresponding rank position so that word[i]
+        receives the i-th highest weight for that topic.
+        """
         beta = np.array(self._model.get_beta())  # (n_topics, vocab_size)
-        top_words_per_topic = self._model.get_top_words(
-            top_n=self.config.params.get("num_top_words", 15)
-        )
+        top_n = self.config.params.get("num_top_words", 15)
+        top_words_per_topic = self._model.get_top_words(top_n=top_n)
+
         topics: Dict[int, List[Tuple[str, float]]] = {}
         for t_id, words in enumerate(top_words_per_topic):
-            word_scores = [(w, float(beta[t_id, self._word_idx(w, beta, t_id)])) for w in words]
-            topics[t_id] = word_scores
+            # Rank indices for this topic in descending weight order
+            ranked_indices = np.argsort(beta[t_id])[::-1][: len(words)]
+            topics[t_id] = [
+                (word, float(beta[t_id, idx]))
+                for word, idx in zip(words, ranked_indices)
+            ]
         return topics
 
-    def _word_idx(self, word: str, beta: np.ndarray, topic_id: int) -> int:
-        """Return argmax position for a word given the beta matrix."""
-        # FASTopic doesn't expose a public vocab; use rank position instead
-        top_idx = int(np.argsort(beta[topic_id])[::-1][0])
-        return top_idx
-
     def get_topic_info(self) -> Any:
-        top_words_per_topic = self._model.get_top_words(
-            top_n=self.config.params.get("num_top_words", 15)
-        )
+        top_n = self.config.params.get("num_top_words", 15)
+        top_words_per_topic = self._model.get_top_words(top_n=top_n)
         return [
             {"topic_id": t_id, "top_words": words}
             for t_id, words in enumerate(top_words_per_topic)
         ]
+
+    def get_document_topic_assignments(self) -> List[int]:
+        """Return dominant topic_id per document from theta matrix."""
+        if self._theta is not None:
+            return np.argmax(self._theta, axis=1).tolist()
+        return []
 
     def get_representative_docs(self, topic_id: int, n: int = 3) -> List[str]:
         if self._theta is None or not self._fitted_texts:
@@ -106,7 +117,8 @@ class FASTopicAdapter(TopicModelBase):
         path.mkdir(parents=True, exist_ok=True)
         with open(path / "fastopic_model.pkl", "wb") as f:
             pickle.dump(self._model, f)
-        np.save(path / "theta.npy", self._theta if self._theta is not None else np.array([]))
+        theta = self._theta if self._theta is not None else np.array([])
+        np.save(path / "theta.npy", theta)
         logger.info(f"FASTopic model saved to {path}")
 
     def load(self, path: Path) -> "FASTopicAdapter":

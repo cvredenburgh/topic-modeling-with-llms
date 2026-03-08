@@ -46,10 +46,12 @@ def summarize_topics(
 
             raw = ""
             summary = ""
+            status = "failed"
             try:
                 raw = client.complete(prompt)
                 parsed = _parse_json(raw)
                 summary = parsed.get("summary", "")
+                status = "success"
             except Exception as exc:
                 logger.warning(f"Summarization failed for topic {topic_id}: {exc}")
 
@@ -60,6 +62,7 @@ def summarize_topics(
                     "representative_docs": rep_docs,
                     "summary": summary,
                     "raw_response": raw,
+                    "analysis_status": status,
                 }
             )
             logger.info(f"Summarized topic {topic_id}: {summary[:80]!r}...")

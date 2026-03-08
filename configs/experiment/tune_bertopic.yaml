@@ -33,7 +33,23 @@ tuning:
   enabled: true
   method: optuna
   n_trials: 30
+  # Set metric: composite to use weighted scoring across multiple metrics.
+  # Set metric: coherence (or any single metric) for single-objective tuning.
   metric: coherence
+  metric_weights:
+    coherence: 2.0
+    diversity: 2.0
+    silhouette: 1.5
+    outlier_ratio: 0.5
+    dist_entropy: 0.75
+    topic_count: 1.0
+  higher_is_better:
+    coherence: true
+    diversity: true
+    silhouette: true
+    outlier_ratio: false
+    dist_entropy: true
+    topic_count: true
   search_space:
     umap_n_components:
       type: int

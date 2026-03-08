@@ -1,12 +1,8 @@
 """Tests for LLM output parsing and client retry logic."""
 import json
-import sys
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from topic_modeling.config.schema import LLMConfig
 from topic_modeling.llm.summarizer import _parse_json, summarize_topics
@@ -73,6 +69,35 @@ def test_llm_client_raises_after_max_retries():
             client.complete("test prompt")
 
 
+def test_llm_client_rate_limiter_constructed():
+    from topic_modeling.llm.client import LLMClient, _RateLimiter
+
+    cfg = LLMConfig(tokens_per_minute=40000)
+    with patch("topic_modeling.llm.client.anthropic.Anthropic"):
+        client = LLMClient(cfg)
+        assert client._limiter is not None
+        assert isinstance(client._limiter, _RateLimiter)
+
+
+def test_llm_client_no_rate_limiter_by_default():
+    from topic_modeling.llm.client import LLMClient
+
+    cfg = LLMConfig()
+    with patch("topic_modeling.llm.client.anthropic.Anthropic"):
+        client = LLMClient(cfg)
+        assert client._limiter is None
+
+
+def test_rate_limiter_acquire_tracks_usage():
+    from topic_modeling.llm.client import _RateLimiter
+
+    limiter = _RateLimiter(tpm=10000, safety_margin=1.0)
+    limiter.acquire(100)
+    assert limiter._used == 100
+    limiter.acquire(200)
+    assert limiter._used == 300
+
+
 # --- Summarizer output structure ---
 
 def test_summarize_topics_output_structure():
@@ -96,7 +121,24 @@ def test_summarize_topics_output_structure():
         assert "topic_id" in r
         assert "keywords" in r
         assert "summary" in r
+        assert "analysis_status" in r
         assert r["summary"] == "This is a summary."
+        assert r["analysis_status"] == "success"
+
+
+def test_summarize_topics_failed_status():
+    cfg = LLMConfig(enabled=True, max_retries=1, retry_delay_seconds=0.0)
+
+    mock_model = MagicMock()
+    mock_model.get_topics.return_value = {0: [("word1", 0.9)]}
+    mock_model.get_representative_docs.return_value = ["doc one"]
+
+    with patch("topic_modeling.llm.summarizer.LLMClient") as MockClient:
+        MockClient.return_value.complete.side_effect = RuntimeError("API error")
+        results = summarize_topics(mock_model, cfg)
+
+    assert results[0]["analysis_status"] == "failed"
+    assert results[0]["summary"] == ""
 
 
 # --- Tagger output structure ---
@@ -110,11 +152,60 @@ def test_tag_topics_output_structure():
     }
     mock_model.get_representative_docs.return_value = ["great product"]
 
-    mock_response = '{"tags": ["product quality", "durability"]}'
+    mock_response = '{"tags": [{"tag": "product quality", "consistent": true}, {"tag": "durability", "consistent": false}]}'
 
     with patch("topic_modeling.llm.tagger.LLMClient") as MockClient:
         MockClient.return_value.complete.return_value = mock_response
         results = tag_topics(mock_model, cfg)
 
     assert len(results) == 1
-    assert results[0]["tags"] == ["product quality", "durability"]
+    r = results[0]
+    assert r["analysis_status"] == "success"
+    assert r["tags"] == [
+        {"tag": "product quality", "consistent": True},
+        {"tag": "durability", "consistent": False},
+    ]
+
+
+def test_tag_topics_consistency_flag():
+    cfg = LLMConfig(enabled=True, max_retries=1, retry_delay_seconds=0.0)
+
+    mock_model = MagicMock()
+    mock_model.get_topics.return_value = {0: [("shipping", 0.9), ("delay", 0.8)]}
+    mock_model.get_representative_docs.return_value = ["late delivery", "slow shipping"]
+
+    mock_response = '{"tags": [{"tag": "shipping delays", "consistent": true}]}'
+
+    with patch("topic_modeling.llm.tagger.LLMClient") as MockClient:
+        MockClient.return_value.complete.return_value = mock_response
+        results = tag_topics(mock_model, cfg)
+
+    tag = results[0]["tags"][0]
+    assert tag["tag"] == "shipping delays"
+    assert tag["consistent"] is True
+
+
+def test_tag_topics_backward_compat_str_tags():
+    """_normalize_tags should accept old str-list format without error."""
+    from topic_modeling.llm.tagger import _normalize_tags
+
+    result = _normalize_tags(["product quality", "shipping"])
+    assert result == [
+        {"tag": "product quality", "consistent": False},
+        {"tag": "shipping", "consistent": False},
+    ]
+
+
+def test_tag_topics_failed_status():
+    cfg = LLMConfig(enabled=True, max_retries=1, retry_delay_seconds=0.0)
+
+    mock_model = MagicMock()
+    mock_model.get_topics.return_value = {0: [("quality", 0.9)]}
+    mock_model.get_representative_docs.return_value = ["great product"]
+
+    with patch("topic_modeling.llm.tagger.LLMClient") as MockClient:
+        MockClient.return_value.complete.side_effect = RuntimeError("API error")
+        results = tag_topics(mock_model, cfg)
+
+    assert results[0]["analysis_status"] == "failed"
+    assert results[0]["tags"] == []

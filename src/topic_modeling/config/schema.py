@@ -28,6 +28,7 @@ class DatasetConfig(BaseModel):
     split: str = "train"
     text_column: str = "text"
     id_column: Optional[str] = None
+    date_column: Optional[str] = None
     metadata_columns: List[str] = Field(default_factory=list)
     sample_n: Optional[int] = None
     sample_frac: Optional[float] = None
@@ -58,6 +59,9 @@ class TuningConfig(BaseModel):
     timeout_seconds: Optional[int] = None
     metric: str = "coherence"
     search_space: Dict[str, Any] = Field(default_factory=dict)
+    metric_weights: Dict[str, float] = Field(default_factory=dict)
+    higher_is_better: Dict[str, bool] = Field(default_factory=dict)
+    metric_bounds: Dict[str, List[float]] = Field(default_factory=dict)
 
 
 class EvaluationConfig(BaseModel):
@@ -77,6 +81,7 @@ class LLMConfig(BaseModel):
     max_tokens: int = 1024
     temperature: float = 0.0
     enabled: bool = True
+    tokens_per_minute: Optional[int] = None  # None = unlimited
 
 
 class ReportingConfig(BaseModel):
@@ -84,6 +89,20 @@ class ReportingConfig(BaseModel):
     top_n_terms: int = 10
     top_n_docs: int = 3
     save_model: bool = True
+    figure_param_metric_pairs: List[List[str]] = Field(default_factory=list)
+    figure_metric_cols: List[str] = Field(default_factory=list)
+
+
+class AnalysisConfig(BaseModel):
+    enabled: bool = False
+    hierarchy: bool = True
+    associations: bool = True
+    trends: bool = False          # requires dataset.date_column
+    trend_freq: str = "ME"        # pandas period alias
+    trend_window: int = 3         # periods for emerging detection
+    keyword_weight: float = 0.7   # hierarchy distance weight
+    min_cooccurrence: int = 5     # associations min count
+    alpha: float = 0.05           # significance level
 
 
 class ExperimentConfig(BaseModel):
@@ -96,3 +115,4 @@ class ExperimentConfig(BaseModel):
     evaluation: EvaluationConfig = Field(default_factory=EvaluationConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     reporting: ReportingConfig = Field(default_factory=ReportingConfig)
+    analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)

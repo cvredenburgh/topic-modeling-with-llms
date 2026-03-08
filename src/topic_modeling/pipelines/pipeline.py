@@ -1,7 +1,6 @@
 """End-to-end topic modeling pipeline."""
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -40,6 +39,7 @@ class Pipeline:
     def run(self) -> Dict[str, Any]:
         cfg = self.config
         set_seeds(cfg.run.seed)
+        self._tuning_trials: Optional[List[Dict]] = None
 
         logger.info(f"=== Pipeline start: {self.run_id} ===")
         self.store.save_json(cfg.model_dump(), "config.json")
@@ -61,8 +61,11 @@ class Pipeline:
         # Stage 5: LLM post-processing
         summaries, tags = self._stage_llm(model)
 
-        # Stage 6: Reporting
-        self._stage_report(model, topic_ids, metrics, summaries, tags, pre_stats)
+        # Stage 6: Analysis (optional)
+        analysis_results = self._stage_analysis(model, docs)
+
+        # Stage 7: Reporting
+        self._stage_report(model, topic_ids, metrics, summaries, tags, pre_stats, analysis_results)
 
         # Save final run summary
         summary = {
@@ -110,6 +113,7 @@ class Pipeline:
         if cfg.tuning.enabled:
             logger.info("--- Stage: Hyperparameter tuning ---")
             model_cfg, trials = self._run_tuning(texts)
+            self._tuning_trials = trials
             self.store.save_json(
                 {"best_params": model_cfg.params, "trials": trials},
                 "tuning_results.json",
@@ -128,22 +132,38 @@ class Pipeline:
         return model, topic_ids
 
     def _run_tuning(self, texts: List[str]):
-        from topic_modeling.evaluation.metrics import evaluate as eval_fn
         from topic_modeling.config.schema import ModelConfig
 
         cfg = self.config
+        tuning_cfg = cfg.tuning
 
-        def score_fn(model_cfg: ModelConfig, texts: List[str]) -> float:
-            m = build_model(model_cfg, seed=cfg.run.seed)
-            m.fit(texts)
-            t_ids, _ = m.transform(texts)
-            metrics = eval_fn(m, texts, t_ids, cfg.evaluation)
-            return float(metrics.get(cfg.tuning.metric, 0) or 0)
+        if tuning_cfg.metric == "composite":
+            from topic_modeling.tuning.scoring import composite_score, estimate_bounds
+
+            weights = tuning_cfg.metric_weights
+            hib = tuning_cfg.higher_is_better
+            trial_metrics_history: List[Dict] = []
+
+            def score_fn(model_cfg: ModelConfig, texts: List[str]) -> float:
+                m = build_model(model_cfg, seed=cfg.run.seed)
+                m.fit(texts)
+                t_ids, _ = m.transform(texts)
+                trial_metrics = evaluate(m, texts, t_ids, cfg.evaluation)
+                trial_metrics_history.append(trial_metrics)
+                bounds = {**tuning_cfg.metric_bounds, **estimate_bounds(trial_metrics_history, weights)}
+                return composite_score(trial_metrics, weights, hib, bounds)
+        else:
+            def score_fn(model_cfg: ModelConfig, texts: List[str]) -> float:
+                m = build_model(model_cfg, seed=cfg.run.seed)
+                m.fit(texts)
+                t_ids, _ = m.transform(texts)
+                trial_metrics = evaluate(m, texts, t_ids, cfg.evaluation)
+                return float(trial_metrics.get(tuning_cfg.metric, 0) or 0)
 
         best_params, trials = tune(
             texts=texts,
             base_model_config=cfg.model,
-            tuning_config=cfg.tuning,
+            tuning_config=tuning_cfg,
             evaluate_fn=score_fn,
             seed=cfg.run.seed,
         )
@@ -157,7 +177,8 @@ class Pipeline:
         topic_ids: List[int],
     ) -> Dict[str, Any]:
         logger.info("--- Stage: Evaluation ---")
-        metrics = evaluate(model, texts, topic_ids, self.config.evaluation)
+        embeddings = model.get_umap_embeddings() if hasattr(model, "get_umap_embeddings") else None
+        metrics = evaluate(model, texts, topic_ids, self.config.evaluation, embeddings=embeddings)
         self.store.save_json(metrics, "metrics.json")
         return metrics
 
@@ -187,6 +208,53 @@ class Pipeline:
         )
         return summaries, tags
 
+    def _stage_analysis(
+        self,
+        model: TopicModelBase,
+        docs: List,
+    ) -> Dict[str, Any]:
+        cfg = self.config.analysis
+        if not cfg.enabled:
+            return {}
+
+        logger.info("--- Stage: Analysis ---")
+        from topic_modeling.analysis.associations import compute_topic_associations
+        from topic_modeling.analysis.hierarchy import build_topic_hierarchy
+        from topic_modeling.analysis.stats import test_topic_trend_significance
+        from topic_modeling.analysis.trends import compute_topic_trends, detect_emerging_topics
+
+        results: Dict[str, Any] = {}
+        assignments = model.get_document_topic_assignments()
+
+        if cfg.hierarchy:
+            results["hierarchy"] = build_topic_hierarchy(
+                model,
+                keyword_weight=cfg.keyword_weight,
+            )
+
+        if cfg.associations:
+            results["associations"] = compute_topic_associations(
+                assignments,
+                min_cooccurrence=cfg.min_cooccurrence,
+            )
+
+        date_col = self.config.dataset.date_column
+        if cfg.trends and date_col:
+            doc_dates = [getattr(d, date_col, None) or "" for d in docs]
+            if any(doc_dates):
+                trend_df = compute_topic_trends(
+                    doc_dates, assignments, freq=cfg.trend_freq
+                )
+                results["trends"] = trend_df
+                results["emerging"] = detect_emerging_topics(
+                    trend_df, window=cfg.trend_window
+                )
+                results["trend_stats"] = test_topic_trend_significance(
+                    trend_df, alpha=cfg.alpha
+                )
+
+        return results
+
     def _stage_report(
         self,
         model: TopicModelBase,
@@ -195,6 +263,7 @@ class Pipeline:
         summaries: List[Dict],
         tags: List[Dict],
         pre_stats: Dict[str, Any],
+        analysis_results: Optional[Dict[str, Any]] = None,
     ) -> None:
         logger.info("--- Stage: Reporting ---")
         generate_report(
@@ -206,6 +275,8 @@ class Pipeline:
             summaries=summaries,
             tags=tags,
             preprocessing_stats=pre_stats,
+            tuning_trials=getattr(self, "_tuning_trials", None),
+            analysis_results=analysis_results or {},
         )
 
 

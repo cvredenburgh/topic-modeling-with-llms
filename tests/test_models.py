@@ -1,11 +1,8 @@
 """Tests for model adapter interface contract."""
 import sys
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from topic_modeling.config.schema import ModelConfig
 from topic_modeling.models import build_model

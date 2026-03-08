@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from topic_modeling.config.schema import LLMConfig
 from topic_modeling.llm.client import LLMClient
@@ -25,7 +25,8 @@ def tag_topics(
     """Assign business/domain tags to every non-outlier topic.
 
     Returns:
-        List of dicts: {topic_id, keywords, tags, raw_response}
+        List of dicts: {topic_id, keywords, tags, raw_response, analysis_status}
+        where tags is List[{"tag": str, "consistent": bool}]
     """
     client = LLMClient(config)
     prompt_template = _PROMPT_PATH.read_text()
@@ -47,11 +48,13 @@ def tag_topics(
             )
 
             raw = ""
-            tags: List[str] = []
+            tags: List[Dict[str, Any]] = []
+            status = "failed"
             try:
                 raw = client.complete(prompt)
                 parsed = _parse_json(raw)
-                tags = parsed.get("tags", [])
+                tags = _normalize_tags(parsed.get("tags", []))
+                status = "success"
             except Exception as exc:
                 logger.warning(f"Tagging failed for topic {topic_id}: {exc}")
 
@@ -61,11 +64,23 @@ def tag_topics(
                     "keywords": keywords,
                     "tags": tags,
                     "raw_response": raw,
+                    "analysis_status": status,
                 }
             )
             logger.info(f"Tagged topic {topic_id}: {tags}")
 
     return results
+
+
+def _normalize_tags(raw_tags: list) -> List[Dict[str, Any]]:
+    """Accept both old str format and new dict format, normalizing to dicts."""
+    result = []
+    for t in raw_tags:
+        if isinstance(t, dict):
+            result.append({"tag": str(t.get("tag", "")), "consistent": bool(t.get("consistent", False))})
+        else:
+            result.append({"tag": str(t), "consistent": False})
+    return result
 
 
 def _format_docs(docs: List[str]) -> str:

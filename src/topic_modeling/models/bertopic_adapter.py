@@ -19,6 +19,7 @@ class BERTopicAdapter(TopicModelBase):
         self.seed = seed
         self._model: Any = None
         self._fitted_texts: List[str] = []
+        self._umap_embeddings: Optional[np.ndarray] = None
         self._build_model()
 
     def _build_model(self) -> None:
@@ -46,7 +47,10 @@ class BERTopicAdapter(TopicModelBase):
             p.get("embedding_model", "all-MiniLM-L6-v2")
         )
 
-        self._model = BERTopic(
+        vectorizer_model = self._build_vectorizer(p)
+        representation_model = self._build_representation_model(p)
+
+        kwargs: Dict[str, Any] = dict(
             umap_model=umap_model,
             hdbscan_model=hdbscan_model,
             embedding_model=embedding_model,
@@ -54,14 +58,96 @@ class BERTopicAdapter(TopicModelBase):
             nr_topics=p.get("nr_topics", None),
             verbose=False,
         )
+        if vectorizer_model is not None:
+            kwargs["vectorizer_model"] = vectorizer_model
+        if representation_model is not None:
+            kwargs["representation_model"] = representation_model
+
+        self._model = BERTopic(**kwargs)
         logger.info(f"BERTopic built with params: {p}")
+
+    def _build_vectorizer(self, p: Dict[str, Any]) -> Any:
+        vectorizer_type = p.get("vectorizer_type")
+        if not vectorizer_type:
+            return None
+
+        ngram_range = tuple(p.get("vectorizer_ngram_range", [1, 1]))
+        stop_words = p.get("vectorizer_stop_words", None)
+
+        if vectorizer_type == "tfidf":
+            from sklearn.feature_extraction.text import TfidfVectorizer  # type: ignore
+            return TfidfVectorizer(
+                max_features=p.get("vectorizer_max_features", 10000),
+                ngram_range=ngram_range,
+                min_df=p.get("vectorizer_min_df", 1),
+                max_df=p.get("vectorizer_max_df", 1.0),
+                stop_words=stop_words if stop_words else None,
+            )
+        if vectorizer_type == "count":
+            from sklearn.feature_extraction.text import CountVectorizer  # type: ignore
+            return CountVectorizer(
+                max_features=p.get("vectorizer_max_features", 10000),
+                ngram_range=ngram_range,
+                min_df=p.get("vectorizer_min_df", 1),
+                max_df=p.get("vectorizer_max_df", 1.0),
+                stop_words=stop_words if stop_words else None,
+            )
+        logger.warning(f"Unknown vectorizer_type {vectorizer_type!r}; using default")
+        return None
+
+    def _build_representation_model(self, p: Dict[str, Any]) -> Any:
+        rep_name = p.get("representation_model")
+        if not rep_name:
+            return None
+
+        if rep_name == "keybert":
+            from bertopic.representation import KeyBERTInspired  # type: ignore
+            return KeyBERTInspired()
+        if rep_name == "mmr":
+            from bertopic.representation import MaximalMarginalRelevance  # type: ignore
+            return MaximalMarginalRelevance(
+                diversity=p.get("representation_diversity", 0.3)
+            )
+        logger.warning(f"Unknown representation_model {rep_name!r}; using default c-TF-IDF")
+        return None
 
     def fit(self, texts: List[str]) -> "BERTopicAdapter":
         logger.info(f"Fitting BERTopic on {len(texts)} documents")
         self._fitted_texts = texts
-        self._model.fit_transform(texts)
+        topics, _ = self._model.fit_transform(texts)
+
+        # Store UMAP-reduced embeddings for downstream cluster quality metrics
+        self._umap_embeddings = getattr(
+            getattr(self._model, "umap_model", None), "embedding_", None
+        )
+
+        if self.config.params.get("reduce_outliers", False) and topics is not None:
+            try:
+                topics = self._model.reduce_outliers(texts, topics, strategy="embeddings")
+                self._model.update_topics(texts, topics=topics)
+                logger.info("Outlier reduction applied")
+            except Exception as exc:
+                logger.warning(f"Outlier reduction failed: {exc}")
+
         logger.info(f"BERTopic: discovered {self.get_topic_count()} topics")
         return self
+
+    def get_document_topic_assignments(self) -> List[int]:
+        """Return topic_id per document from HDBSCAN labels after fit."""
+        hdbscan_model = getattr(self._model, "hdbscan_model", None)
+        if hdbscan_model is not None:
+            labels = getattr(hdbscan_model, "labels_", None)
+            if labels is not None:
+                return list(map(int, labels))
+        # Fallback: re-transform fitted texts
+        if self._fitted_texts:
+            ids, _ = self.transform(self._fitted_texts)
+            return ids
+        return []
+
+    def get_umap_embeddings(self) -> Optional[np.ndarray]:
+        """Return UMAP-reduced embeddings stored after fit (for cluster metrics)."""
+        return self._umap_embeddings
 
     def transform(
         self, texts: List[str]
