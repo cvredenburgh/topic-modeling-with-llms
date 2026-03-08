@@ -137,7 +137,7 @@ def test_emerging_empty_trend():
 def test_emerging_growing_topic_flagged():
     trend_df = _make_trend_df({0: [0.05, 0.10, 0.20]})  # 4× growth
     df = detect_emerging_topics(trend_df, window=3, min_growth_rate=0.5)
-    assert df[df["topic_id"] == 0]["emerging"].iloc[0] is True
+    assert bool(df[df["topic_id"] == 0]["emerging"].iloc[0]) is True
 
 
 def test_emerging_stable_topic_not_flagged():
