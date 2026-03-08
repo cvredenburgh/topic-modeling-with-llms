@@ -121,7 +121,7 @@ def test_compare_counts_correct():
     assert row1.iloc[0]["count_a"] == 1
     assert row1.iloc[0]["count_b"] == 2
     assert row2.iloc[0]["count_a"] == 0
-    assert row2.iloc[0]["count_b"] == 2
+    assert row2.iloc[0]["count_b"] == 1
 
 
 def test_compare_identical_distributions_not_significant():

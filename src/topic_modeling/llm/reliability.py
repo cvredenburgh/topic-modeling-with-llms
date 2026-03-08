@@ -61,13 +61,20 @@ def tag_consensus(
         }
 
     freq: Dict[str, int] = {}
+    first_seen: Dict[str, int] = {}
+    seen_idx = 0
     for tags in normalized:
+        for tag in tags:
+            if tag not in first_seen:
+                first_seen[tag] = seen_idx
+                seen_idx += 1
         for tag in set(tags):
             freq[tag] = freq.get(tag, 0) + 1
 
     n = len(normalized)
     tag_rows = []
-    for tag, count in sorted(freq.items()):
+    ranked_tags = sorted(freq.items(), key=lambda item: (-item[1], first_seen[item[0]], item[0]))
+    for tag, count in ranked_tags:
         agreement = count / n
         tag_rows.append(
             {"tag": tag, "consistent": agreement >= min_agreement, "agreement": round(agreement, 4)}

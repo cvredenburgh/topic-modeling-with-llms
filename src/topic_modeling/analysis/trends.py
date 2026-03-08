@@ -35,7 +35,8 @@ def compute_topic_trends(
     if df.empty:
         return pd.DataFrame(columns=["topic_id", "period", "doc_count", "ci_low", "ci_high", "share"])
 
-    df["period"] = df["date"].dt.to_period(freq)
+    period_freq = _normalize_period_freq(freq)
+    df["period"] = df["date"].dt.to_period(period_freq)
     periods = sorted(df["period"].unique())
     topics = sorted(df["topic_id"].unique())
 
@@ -112,7 +113,7 @@ def detect_emerging_topics(
             else:
                 growth_rate = (end - start) / start
 
-        emerging = growth_rate >= min_growth_rate
+        emerging = bool(growth_rate >= min_growth_rate)
         rows.append({"topic_id": tid, "growth_rate": round(growth_rate, 6), "emerging": emerging})
 
     return pd.DataFrame(rows)
@@ -121,6 +122,18 @@ def detect_emerging_topics(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _normalize_period_freq(freq: str) -> str:
+    """Map end-of-period aliases to Period-compatible aliases."""
+    normalized = freq.upper()
+    alias_map = {
+        "ME": "M",
+        "QE": "Q",
+        "YE": "Y",
+    }
+    return alias_map.get(normalized, freq)
+
 
 def _bootstrap_ci(
     labels: np.ndarray,

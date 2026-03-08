@@ -61,6 +61,21 @@ def compute_topic_trend_significance(
     return pd.DataFrame(rows)
 
 
+def test_topic_trend_significance(
+    trend_df: pd.DataFrame,
+    alpha: float = 0.05,
+) -> pd.DataFrame:
+    """Backward-compatible alias for trend significance testing.
+
+    Several call sites and tests use the older ``test_*`` function name.
+    Keep this thin wrapper so existing code continues to work.
+    """
+    return compute_topic_trend_significance(trend_df=trend_df, alpha=alpha)
+
+
+test_topic_trend_significance.__test__ = False
+
+
 def compare_topic_prevalence(
     assignments_a: List[int],
     assignments_b: List[int],
