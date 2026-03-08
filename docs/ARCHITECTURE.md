@@ -56,6 +56,11 @@ Prompt templates live in `llm/prompts/` as plain `.txt` files with Python
 `str.format()` placeholders. The `LLMClient` handles retry with exponential
 backoff. All raw and parsed LLM responses are saved to disk.
 
+The LLM layer supports multiple providers (`anthropic`, `openai`, `gemini`,
+`grok`) through one client abstraction and includes an optional reliability
+mode that samples multiple completions and computes consensus/consistency
+scores for summaries and tags.
+
 ### Artifact persistence
 `ArtifactStore` writes locally under `outputs/runs/<run_id>/` and optionally
 mirrors to GCS when `runtime.target=gcp`.
@@ -65,7 +70,7 @@ mirrors to GCS when `runtime.target=gcp`.
 | Target | IO | Execution |
 |--------|-----|-----------|
 | `local` | Local filesystem | Direct Python process |
-| `gcp`   | GCS bucket (via `google-cloud-storage`) | Vertex AI / Cloud Run job |
+| `gcp`   | GCS bucket (via `google-cloud-storage`) | Local process + cloud artifact mirroring |
 
 Switch via config: `--set runtime.target=gcp`
 

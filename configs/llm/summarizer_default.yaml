@@ -1,8 +1,13 @@
 provider: anthropic
 model: claude-sonnet-4-6
+api_key_env: ~
+api_base: ~
 batch_size: 10
 max_retries: 3
 retry_delay_seconds: 2.0
 max_tokens: 1024
 temperature: 0.0
+reliability_enabled: false
+reliability_samples: 3
+reliability_min_agreement: 0.67
 enabled: true

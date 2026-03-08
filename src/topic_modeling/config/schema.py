@@ -73,13 +73,18 @@ class EvaluationConfig(BaseModel):
 
 
 class LLMConfig(BaseModel):
-    provider: str = "anthropic"
+    provider: Literal["anthropic", "openai", "gemini", "grok"] = "anthropic"
     model: str = "claude-sonnet-4-6"
+    api_key_env: Optional[str] = None
+    api_base: Optional[str] = None
     batch_size: int = 10
     max_retries: int = 3
     retry_delay_seconds: float = 2.0
     max_tokens: int = 1024
     temperature: float = 0.0
+    reliability_enabled: bool = False
+    reliability_samples: int = 3
+    reliability_min_agreement: float = 0.67
     enabled: bool = True
     tokens_per_minute: Optional[int] = None  # None = unlimited
 

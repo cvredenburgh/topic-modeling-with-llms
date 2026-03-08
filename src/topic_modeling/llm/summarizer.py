@@ -8,6 +8,7 @@ from typing import Dict, List
 
 from topic_modeling.config.schema import LLMConfig
 from topic_modeling.llm.client import LLMClient
+from topic_modeling.llm.reliability import summary_consensus
 from topic_modeling.models.base import TopicModelBase
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,7 @@ def summarize_topics(
     """Generate LLM summaries for every non-outlier topic.
 
     Returns:
-        List of dicts: {topic_id, keywords, representative_docs, summary, raw_response}
+        List of dicts with summary text, reliability metadata, and raw responses.
     """
     client = LLMClient(config)
     prompt_template = _PROMPT_PATH.read_text()
@@ -45,15 +46,31 @@ def summarize_topics(
             )
 
             raw = ""
+            raw_responses: List[str] = []
+            sampled_summaries: List[str] = []
             summary = ""
             status = "failed"
             try:
-                raw = client.complete(prompt)
-                parsed = _parse_json(raw)
-                summary = parsed.get("summary", "")
+                n_samples = config.reliability_samples if config.reliability_enabled else 1
+                n_samples = max(1, n_samples)
+                for _ in range(n_samples):
+                    raw = client.complete(prompt)
+                    raw_responses.append(raw)
+                    parsed = _parse_json(raw)
+                    sampled_summaries.append(str(parsed.get("summary", "")).strip())
+
+                consensus = summary_consensus(
+                    sampled_summaries,
+                    min_agreement=config.reliability_min_agreement,
+                )
+                summary = str(consensus["summary"])
                 status = "success"
             except Exception as exc:
                 logger.warning(f"Summarization failed for topic {topic_id}: {exc}")
+                consensus = summary_consensus(
+                    sampled_summaries,
+                    min_agreement=config.reliability_min_agreement,
+                )
 
             results.append(
                 {
@@ -62,6 +79,10 @@ def summarize_topics(
                     "representative_docs": rep_docs,
                     "summary": summary,
                     "raw_response": raw,
+                    "raw_responses": raw_responses,
+                    "candidate_summaries": consensus["candidate_summaries"],
+                    "reliability_score": consensus["reliability_score"],
+                    "reliability_consistent": consensus["reliability_consistent"],
                     "analysis_status": status,
                 }
             )

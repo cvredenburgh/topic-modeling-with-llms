@@ -1,11 +1,10 @@
-"""Thin Anthropic API client with retry logic."""
+"""Provider-agnostic LLM client with retry logic."""
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
-
-import anthropic
 
 from topic_modeling.config.schema import LLMConfig
 
@@ -41,16 +40,61 @@ class _RateLimiter:
 
 
 class LLMClient:
-    """Wraps the Anthropic Messages API with retry and structured output helpers."""
+    """Provider-agnostic LLM client with retry and rate limiting."""
 
     def __init__(self, config: LLMConfig):
         self.config = config
-        self._client = anthropic.Anthropic()
+        self._provider = config.provider
+        self._client = self._build_client()
         self._limiter = (
             _RateLimiter(config.tokens_per_minute)
             if config.tokens_per_minute is not None
             else None
         )
+
+    def _build_client(self):
+        if self._provider == "anthropic":
+            import anthropic  # type: ignore
+
+            kwargs = {}
+            api_key = _resolve_api_key(
+                explicit_env_var=self.config.api_key_env,
+                default_env_var="ANTHROPIC_API_KEY",
+            )
+            if api_key:
+                kwargs["api_key"] = api_key
+            return anthropic.Anthropic(**kwargs)
+
+        if self._provider in ("openai", "grok"):
+            from openai import OpenAI  # type: ignore
+
+            default_env = "OPENAI_API_KEY" if self._provider == "openai" else "XAI_API_KEY"
+            api_key = _resolve_api_key(
+                explicit_env_var=self.config.api_key_env,
+                default_env_var=default_env,
+            )
+            base_url = self.config.api_base
+            if self._provider == "grok" and not base_url:
+                base_url = "https://api.x.ai/v1"
+            kwargs = {}
+            if api_key:
+                kwargs["api_key"] = api_key
+            if base_url:
+                kwargs["base_url"] = base_url
+            return OpenAI(**kwargs)
+
+        if self._provider == "gemini":
+            import google.generativeai as genai  # type: ignore
+
+            api_key = _resolve_api_key(
+                explicit_env_var=self.config.api_key_env,
+                default_env_var="GOOGLE_API_KEY",
+            )
+            if api_key:
+                genai.configure(api_key=api_key)
+            return genai.GenerativeModel(self.config.model)
+
+        raise ValueError(f"Unsupported LLM provider: {self._provider!r}")
 
     def complete(self, prompt: str) -> str:
         """Send a single user prompt and return the text response."""
@@ -61,13 +105,35 @@ class LLMClient:
         last_exc: Exception | None = None
         for attempt in range(1, self.config.max_retries + 1):
             try:
-                message = self._client.messages.create(
-                    model=self.config.model,
-                    max_tokens=self.config.max_tokens,
-                    temperature=self.config.temperature,
-                    messages=[{"role": "user", "content": prompt}],
-                )
-                return message.content[0].text
+                if self._provider == "anthropic":
+                    message = self._client.messages.create(
+                        model=self.config.model,
+                        max_tokens=self.config.max_tokens,
+                        temperature=self.config.temperature,
+                        messages=[{"role": "user", "content": prompt}],
+                    )
+                    return message.content[0].text
+
+                if self._provider in ("openai", "grok"):
+                    response = self._client.chat.completions.create(
+                        model=self.config.model,
+                        max_tokens=self.config.max_tokens,
+                        temperature=self.config.temperature,
+                        messages=[{"role": "user", "content": prompt}],
+                    )
+                    return response.choices[0].message.content or ""
+
+                if self._provider == "gemini":
+                    response = self._client.generate_content(
+                        prompt,
+                        generation_config={
+                            "temperature": self.config.temperature,
+                            "max_output_tokens": self.config.max_tokens,
+                        },
+                    )
+                    return getattr(response, "text", "") or ""
+
+                raise ValueError(f"Unsupported LLM provider: {self._provider!r}")
             except Exception as exc:
                 last_exc = exc
                 logger.warning(
@@ -79,3 +145,8 @@ class LLMClient:
         raise RuntimeError(
             f"LLM call failed after {self.config.max_retries} attempts"
         ) from last_exc
+
+
+def _resolve_api_key(explicit_env_var: str | None, default_env_var: str) -> str | None:
+    env_var = explicit_env_var or default_env_var
+    return os.getenv(env_var)

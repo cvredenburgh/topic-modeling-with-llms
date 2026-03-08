@@ -11,7 +11,8 @@ Supports **BERTopic** and **FASTopic** as interchangeable backends, configurable
 - **Pluggable backends** — swap BERTopic and FASTopic via a single config field
 - **Config-driven** — all pipeline behaviour controlled by YAML; runtime overrides via `--set`
 - **Hyperparameter tuning** — Optuna, grid, or random search with configurable search spaces
-- **LLM post-processing** — Claude (Anthropic) generates topic summaries and business tags
+- **LLM post-processing** — configurable provider (`anthropic`, `openai`, `gemini`, `grok`) for topic summaries and business tags
+- **LLM reliability layer** — multi-sample consensus scoring for summaries/tags with agreement thresholds
 - **Structured outputs** — `topics.csv`, `metrics.json`, `.jsonl` artifacts, and a markdown report per run
 - **Reproducible** — global seed setting, cached interim data, saved model artifacts
 - **GCP-ready** — config-only switch from local to GCP artifact storage
@@ -107,6 +108,29 @@ python scripts/run_pipeline.py \
   --set runtime.target=gcp
 ```
 
+### 7. Switch LLM providers and enable reliability consensus
+
+```bash
+# OpenAI example
+python scripts/run_pipeline.py \
+  --config configs/experiment/baseline_bertopic.yaml \
+  --set llm.provider=openai \
+  --set llm.model=gpt-4.1-mini
+
+# Grok example (OpenAI-compatible API)
+python scripts/run_pipeline.py \
+  --config configs/experiment/baseline_bertopic.yaml \
+  --set llm.provider=grok \
+  --set llm.model=grok-2-latest
+
+# Reliability consensus (3 samples per topic)
+python scripts/run_pipeline.py \
+  --config configs/experiment/baseline_bertopic.yaml \
+  --set llm.reliability_enabled=true \
+  --set llm.reliability_samples=3 \
+  --set llm.reliability_min_agreement=0.67
+```
+
 ---
 
 ## Run Outputs
@@ -151,7 +175,7 @@ Top-level experiment configs reference these sections:
 | `model` | `backend` (`bertopic`/`fastopic`), `params` |
 | `tuning` | `enabled`, `method`, `n_trials`, `search_space` |
 | `evaluation` | `metrics`, `coherence_measure`, `topn` |
-| `llm` | `provider`, `model`, `batch_size`, `max_retries`, `enabled` |
+| `llm` | `provider`, `model`, `api_key_env`, `api_base`, `reliability_*`, `batch_size`, `max_retries`, `enabled` |
 | `reporting` | `formats`, `top_n_terms`, `top_n_docs`, `save_model` |
 
 See `docs/ARCHITECTURE.md` for design details and `docs/EXPERIMENTS.md` for the experiment log.

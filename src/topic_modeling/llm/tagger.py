@@ -8,6 +8,7 @@ from typing import Any, Dict, List
 
 from topic_modeling.config.schema import LLMConfig
 from topic_modeling.llm.client import LLMClient
+from topic_modeling.llm.reliability import tag_consensus
 from topic_modeling.models.base import TopicModelBase
 
 logger = logging.getLogger(__name__)
@@ -48,15 +49,33 @@ def tag_topics(
             )
 
             raw = ""
+            raw_responses: List[str] = []
+            sampled_tags: List[List[str]] = []
             tags: List[Dict[str, Any]] = []
             status = "failed"
             try:
-                raw = client.complete(prompt)
-                parsed = _parse_json(raw)
-                tags = _normalize_tags(parsed.get("tags", []))
+                n_samples = config.reliability_samples if config.reliability_enabled else 1
+                n_samples = max(1, n_samples)
+
+                for _ in range(n_samples):
+                    raw = client.complete(prompt)
+                    raw_responses.append(raw)
+                    parsed = _parse_json(raw)
+                    normalized = _normalize_tags(parsed.get("tags", []))
+                    sampled_tags.append([t["tag"] for t in normalized if t.get("tag")])
+
+                consensus = tag_consensus(
+                    sampled_tags,
+                    min_agreement=config.reliability_min_agreement,
+                )
+                tags = list(consensus["tags"])
                 status = "success"
             except Exception as exc:
                 logger.warning(f"Tagging failed for topic {topic_id}: {exc}")
+                consensus = tag_consensus(
+                    sampled_tags,
+                    min_agreement=config.reliability_min_agreement,
+                )
 
             results.append(
                 {
@@ -64,6 +83,10 @@ def tag_topics(
                     "keywords": keywords,
                     "tags": tags,
                     "raw_response": raw,
+                    "raw_responses": raw_responses,
+                    "candidate_tags": consensus["candidate_tags"],
+                    "reliability_score": consensus["reliability_score"],
+                    "reliability_consistent": consensus["reliability_consistent"],
                     "analysis_status": status,
                 }
             )

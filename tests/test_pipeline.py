@@ -16,6 +16,7 @@ from topic_modeling.config.schema import (
     RuntimeConfig,
     TuningConfig,
 )
+from topic_modeling.data.schema import Document
 from topic_modeling.pipelines.pipeline import Pipeline, _make_run_id
 from topic_modeling.tuning.scoring import composite_score, estimate_bounds
 
@@ -135,6 +136,34 @@ def test_pipeline_artifacts_written(tmp_path):
     run_dir = pipeline.run_dir
     assert (run_dir / "run_summary.json").exists()
     assert (run_dir / "config.json").exists()
+
+
+def test_stage_analysis_trends_reads_dates_from_metadata(tmp_path):
+    cfg = _minimal_config(tmp_path)
+    cfg.analysis.enabled = True
+    cfg.analysis.trends = True
+    cfg.analysis.hierarchy = False
+    cfg.analysis.associations = False
+    cfg.dataset.date_column = "timestamp"
+    pipeline = Pipeline(cfg, run_id="test_analysis_dates")
+
+    docs = [
+        Document(doc_id="1", text="doc a", metadata={"timestamp": "2023-01-10"}),
+        Document(doc_id="2", text="doc b", metadata={"timestamp": "2023-02-10"}),
+        Document(doc_id="3", text="doc c", metadata={"timestamp": "2023-02-15"}),
+    ]
+    mock_model = MagicMock()
+    mock_model.get_document_topic_assignments.return_value = [0, 1, 1]
+
+    with (
+        patch("topic_modeling.analysis.trends.compute_topic_trends") as mock_trends,
+        patch("topic_modeling.analysis.trends.detect_emerging_topics"),
+        patch("topic_modeling.analysis.stats.test_topic_trend_significance"),
+    ):
+        mock_trends.return_value = MagicMock()
+        pipeline._stage_analysis(mock_model, docs)
+        called_dates = mock_trends.call_args[0][0]
+        assert called_dates == ["2023-01-10", "2023-02-10", "2023-02-15"]
 
 
 # --- composite scoring ---

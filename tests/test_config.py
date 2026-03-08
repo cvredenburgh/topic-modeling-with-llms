@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from topic_modeling.config.loader import _coerce, _set_nested, load_config
-from topic_modeling.config.schema import ExperimentConfig
+from topic_modeling.config.schema import ExperimentConfig, LLMConfig
 
 
 # --- _coerce ---
@@ -70,3 +70,9 @@ def test_load_config_invalid_override():
     )
     with pytest.raises(ValueError, match="key=value"):
         load_config(str(config_path), overrides=["run.seed"])
+
+
+def test_llm_config_allows_multiple_providers():
+    for provider in ("anthropic", "openai", "gemini", "grok"):
+        cfg = LLMConfig(provider=provider)
+        assert cfg.provider == provider

@@ -96,7 +96,11 @@ def _build_topics_df(
         top_terms = ", ".join(w for w, _ in word_scores[: rpt.top_n_terms])
         rep_docs = model.get_representative_docs(topic_id, n=rpt.top_n_docs)
         summary = summary_map.get(topic_id, {}).get("summary", "")
+        summary_reliability = summary_map.get(topic_id, {}).get("reliability_score", 0.0)
+        summary_consistent = summary_map.get(topic_id, {}).get("reliability_consistent", False)
         raw_tags = tag_map.get(topic_id, {}).get("tags", [])
+        tags_reliability = tag_map.get(topic_id, {}).get("reliability_score", 0.0)
+        tags_consistent = tag_map.get(topic_id, {}).get("reliability_consistent", False)
         topic_tags = "|".join(
             t["tag"] if isinstance(t, dict) else t for t in raw_tags
         )
@@ -108,7 +112,11 @@ def _build_topics_df(
                 "topic_id": topic_id,
                 "top_terms": top_terms,
                 "summary": summary,
+                "summary_reliability_score": summary_reliability,
+                "summary_reliability_consistent": summary_consistent,
                 "tags": topic_tags,
+                "tags_reliability_score": tags_reliability,
+                "tags_reliability_consistent": tags_consistent,
                 "consistent_tags": consistent_tags,
                 "representative_doc_1": rep_docs[0] if len(rep_docs) > 0 else "",
                 "representative_doc_2": rep_docs[1] if len(rep_docs) > 1 else "",

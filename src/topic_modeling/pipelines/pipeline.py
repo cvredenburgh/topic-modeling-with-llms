@@ -240,7 +240,7 @@ class Pipeline:
 
         date_col = self.config.dataset.date_column
         if cfg.trends and date_col:
-            doc_dates = [getattr(d, date_col, None) or "" for d in docs]
+            doc_dates = [str(d.metadata.get(date_col, "") or "") for d in docs]
             if any(doc_dates):
                 trend_df = compute_topic_trends(
                     doc_dates, assignments, freq=cfg.trend_freq

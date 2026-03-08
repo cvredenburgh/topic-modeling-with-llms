@@ -13,8 +13,10 @@ dataset:
   subset: raw_review_All_Beauty
   split: full
   text_column: text
+  date_column: timestamp
   metadata_columns:
     - rating
+    - timestamp
   sample_n: 20000
 
 preprocessing:
@@ -51,11 +53,27 @@ evaluation:
 llm:
   provider: anthropic
   model: claude-sonnet-4-6
+  api_key_env: ~
+  api_base: ~
   batch_size: 10
   max_retries: 3
   max_tokens: 1024
   temperature: 0.0
+  reliability_enabled: false
+  reliability_samples: 3
+  reliability_min_agreement: 0.67
   enabled: true
+
+analysis:
+  enabled: true
+  hierarchy: true
+  associations: true
+  trends: true
+  trend_freq: ME
+  trend_window: 3
+  keyword_weight: 0.7
+  min_cooccurrence: 5
+  alpha: 0.05
 
 reporting:
   formats:
