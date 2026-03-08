@@ -1,0 +1,5 @@
+target: gcp
+gcp_project: YOUR_GCP_PROJECT_ID
+gcp_region: us-central1
+gcp_bucket: YOUR_GCS_BUCKET
+gcp_image: gcr.io/YOUR_GCP_PROJECT_ID/topic-modeling:latest

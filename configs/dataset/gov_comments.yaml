@@ -1,0 +1,8 @@
+source: huggingface
+name: hyperdemocracy/uscis-policy-manual
+subset: ~
+split: train
+text_column: text
+id_column: ~
+metadata_columns: []
+sample_n: 10000

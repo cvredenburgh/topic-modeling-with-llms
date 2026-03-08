@@ -1,0 +1,59 @@
+run:
+  name: baseline_fastopic
+  seed: 42
+  output_dir: outputs/runs
+  log_level: INFO
+
+runtime:
+  target: local
+
+dataset:
+  source: huggingface
+  name: McAuley-Lab/Amazon-Reviews-2023
+  subset: raw_review_All_Beauty
+  split: full
+  text_column: text
+  metadata_columns:
+    - rating
+  sample_n: 20000
+
+preprocessing:
+  min_length: 30
+  remove_duplicates: true
+  strip_html: true
+  language_filter: en
+
+model:
+  backend: fastopic
+  params:
+    num_topics: 50
+    num_top_words: 15
+
+tuning:
+  enabled: false
+
+evaluation:
+  metrics:
+    - coherence
+    - diversity
+    - outlier_ratio
+    - topic_size_stats
+  coherence_measure: c_v
+  topn: 10
+
+llm:
+  provider: anthropic
+  model: claude-sonnet-4-6
+  batch_size: 10
+  max_retries: 3
+  max_tokens: 1024
+  temperature: 0.0
+  enabled: true
+
+reporting:
+  formats:
+    - markdown
+    - json
+  top_n_terms: 10
+  top_n_docs: 3
+  save_model: true

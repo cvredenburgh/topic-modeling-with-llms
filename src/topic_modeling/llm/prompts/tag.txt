@@ -1,0 +1,15 @@
+You are an expert data analyst specializing in topic modeling and business intelligence.
+
+Below are the top keywords and representative documents for a topic discovered through unsupervised topic modeling.
+
+Top keywords: {keywords}
+
+Representative documents:
+{documents}
+
+Domain context: {domain_context}
+
+Assign 2-5 practical business or domain tags that best describe this topic. Tags should be concise noun phrases such as: "product quality", "shipping experience", "pricing concerns", "customer service", "feature request", "policy concern", "return process", "packaging", "durability", "ease of use".
+
+Respond with valid JSON only — no markdown, no explanation outside the JSON:
+{{"tags": ["tag1", "tag2", ...]}}

@@ -1,0 +1,67 @@
+run:
+  name: baseline_bertopic
+  seed: 42
+  output_dir: outputs/runs
+  log_level: INFO
+
+runtime:
+  target: local
+
+dataset:
+  source: huggingface
+  name: McAuley-Lab/Amazon-Reviews-2023
+  subset: raw_review_All_Beauty
+  split: full
+  text_column: text
+  metadata_columns:
+    - rating
+  sample_n: 20000
+
+preprocessing:
+  min_length: 30
+  remove_duplicates: true
+  strip_html: true
+  language_filter: en
+
+model:
+  backend: bertopic
+  params:
+    embedding_model: all-MiniLM-L6-v2
+    umap_n_components: 5
+    umap_n_neighbors: 15
+    umap_min_dist: 0.0
+    umap_metric: cosine
+    hdbscan_min_cluster_size: 15
+    hdbscan_min_samples: 1
+    hdbscan_cluster_selection_method: eom
+    top_n_words: 10
+    nr_topics: ~
+
+tuning:
+  enabled: false
+
+evaluation:
+  metrics:
+    - coherence
+    - diversity
+    - outlier_ratio
+    - topic_size_stats
+  coherence_measure: c_v
+  topn: 10
+
+llm:
+  provider: anthropic
+  model: claude-sonnet-4-6
+  batch_size: 10
+  max_retries: 3
+  max_tokens: 1024
+  temperature: 0.0
+  enabled: true
+
+reporting:
+  formats:
+    - markdown
+    - json
+  top_n_terms: 10
+  top_n_docs: 3
+  save_model: true
